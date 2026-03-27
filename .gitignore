@@ -1,0 +1,12 @@
+.env
+venv/
+__pycache__/
+*.log
+*.json
+*.json.bak
+*.zip
+trades_log.json
+*.bak
+*.bak2
+*.bak
+*.bak2

@@ -1,0 +1,1362 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jane Street Bot — Live Dashboard</title>
+<script src="/lw-charts.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Syne:wght@400;700;800&display=swap');
+
+:root {
+  --bg: #060a0e;
+  --surface: #0b1118;
+  --surface2: #111922;
+  --border: #1e2732;
+  --border2: #2a3441;
+  --text: #cdd9e5;
+  --muted: #636e7b;
+  --eth: #627eea;
+  --sol: #9945ff;
+  --xrp: #00aae4;
+  --green: #3fb950;
+  --red: #f85149;
+  --yellow: #e3b341;
+  --orange: #f0883e;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'JetBrains Mono', monospace;
+  min-height: 100vh;
+}
+
+/* Scanline effect */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,0,0,0.03) 2px,
+    rgba(0,0,0,0.03) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+.app {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  min-height: 100vh;
+}
+
+/* Sidebar */
+.sidebar {
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  padding: 24px 0;
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 240px;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.logo {
+  padding: 0 20px 24px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+
+.logo-title {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: 0.95rem;
+  letter-spacing: -0.3px;
+  color: var(--text);
+}
+
+.logo-sub {
+  font-size: 0.65rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.logo-badge {
+  display: inline-block;
+  background: rgba(98,126,234,0.15);
+  color: var(--eth);
+  font-size: 0.6rem;
+  padding: 2px 6px;
+  border-radius: 3px;
+  margin-top: 6px;
+}
+
+.nav-section {
+  padding: 0 12px;
+  margin-bottom: 8px;
+}
+
+.nav-label {
+  font-size: 0.58rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+  padding: 0 8px;
+  margin-bottom: 4px;
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.78rem;
+  color: var(--muted);
+  transition: all 0.15s;
+  border: 1px solid transparent;
+}
+
+.nav-item:hover { background: var(--surface2); color: var(--text); }
+.nav-item.active {
+  background: var(--surface2);
+  color: var(--text);
+  border-color: var(--border2);
+}
+
+.nav-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.nav-dot.eth { background: var(--eth); }
+.nav-dot.sol { background: var(--sol); }
+.nav-dot.xrp { background: var(--xrp); }
+.nav-dot.overview { background: var(--green); }
+
+.nav-profit {
+  margin-left: auto;
+  font-size: 0.65rem;
+  color: var(--green);
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border);
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.65rem;
+  color: var(--muted);
+}
+
+.pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--green);
+  animation: blink 2s infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; box-shadow: 0 0 4px var(--green); }
+  50% { opacity: 0.3; box-shadow: none; }
+}
+
+/* Main content */
+.main {
+  margin-left: 240px;
+  padding: 24px;
+  min-height: 100vh;
+  width: calc(100vw - 240px);
+  max-width: calc(100vw - 240px);
+  box-sizing: border-box;
+}
+
+/* Top bar */
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.page-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.topbar-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.server-input {
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  width: 220px;
+}
+
+.btn {
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.72rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn:hover { border-color: var(--eth); color: var(--eth); }
+.btn.primary { background: var(--eth); border-color: var(--eth); color: white; }
+.btn.primary:hover { background: #7b96f0; }
+
+/* Grid layouts */
+.grid-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+  width: 100%;
+}
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+  width: 100%;
+}
+
+.grid-2-1 {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 12px;
+  margin-bottom: 20px;
+  width: 100%;
+}
+
+/* Cards */
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.card-sm {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+
+.stat-label {
+  font-size: 0.62rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 6px;
+}
+
+.stat-value {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.stat-value.green { color: var(--green); }
+.stat-value.red { color: var(--red); }
+.stat-sub { font-size: 0.65rem; color: var(--muted); margin-top: 4px; }
+
+/* Coin selector tabs */
+.coin-tabs {
+  display: flex;
+  gap: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px;
+  width: fit-content;
+  margin-bottom: 16px;
+}
+
+.coin-tab {
+  padding: 6px 20px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  font-family: 'JetBrains Mono', monospace;
+  transition: all 0.15s;
+  font-weight: 500;
+}
+
+.coin-tab.active { background: var(--surface2); color: var(--text); }
+.coin-tab.eth.active { color: var(--eth); }
+.coin-tab.sol.active { color: var(--sol); }
+.coin-tab.xrp.active { color: var(--xrp); }
+
+/* K-line chart */
+.chart-container {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 20px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.chart-title {
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.chart-price {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.chart-change {
+  font-size: 0.72rem;
+  margin-left: 8px;
+}
+
+.chart-change.up { color: var(--green); }
+.chart-change.down { color: var(--red); }
+
+.interval-btns {
+  display: flex;
+  gap: 4px;
+}
+
+.interval-btn {
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 0.65rem;
+  cursor: pointer;
+  border: 1px solid var(--border2);
+  background: transparent;
+  color: var(--muted);
+  font-family: 'JetBrains Mono', monospace;
+  transition: all 0.15s;
+}
+
+.interval-btn.active, .interval-btn:hover {
+  background: var(--surface2);
+  color: var(--text);
+  border-color: var(--border2);
+}
+
+#kline-chart {
+  height: 380px;
+  width: 100%;
+}
+
+/* Legend */
+.chart-legend {
+  display: flex;
+  gap: 16px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.65rem;
+  color: var(--muted);
+}
+
+.legend-line {
+  width: 20px;
+  height: 2px;
+  border-radius: 1px;
+}
+
+/* Batch list */
+.batch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.batch-item {
+  display: grid;
+  grid-template-columns: 36px 48px 1fr 1fr 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  font-size: 0.7rem;
+  transition: border-color 0.15s;
+}
+
+.batch-item:hover { border-color: var(--border2); }
+
+.batch-id { color: var(--muted); font-size: 0.62rem; }
+
+.badge {
+  font-size: 0.58rem;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+  text-align: center;
+}
+
+.badge.inner { background: rgba(63,185,80,0.12); color: var(--green); }
+.badge.outer { background: rgba(227,179,65,0.12); color: var(--yellow); }
+
+.batch-buy { }
+.batch-sell { color: var(--green); }
+.batch-status {
+  font-size: 0.6rem;
+  color: var(--muted);
+  text-align: right;
+}
+
+/* Daily table */
+.daily-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.72rem;
+}
+
+.daily-table th {
+  text-align: left;
+  padding: 8px 12px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--border);
+  font-weight: 400;
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+}
+
+.daily-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid rgba(30,39,50,0.5);
+}
+
+.daily-table tr:last-child td { border-bottom: none; }
+.daily-table tr:hover td { background: rgba(255,255,255,0.015); }
+.daily-table tr.today td { background: rgba(98,126,234,0.04); }
+
+.profit { color: var(--green); }
+.loss { color: var(--red); }
+.today-badge {
+  font-size: 0.55rem;
+  background: rgba(98,126,234,0.2);
+  color: var(--eth);
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: 4px;
+}
+
+/* Section header */
+.section-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.section-title {
+  font-size: 0.65rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 1.2px;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* Trade feed */
+.trade-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: calc(100vh - 180px);
+  overflow-y: auto;
+}
+
+.trade-item {
+  display: grid;
+  grid-template-columns: 140px 60px 48px 90px 90px 1fr;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  font-size: 0.7rem;
+  transition: border-color 0.15s;
+  animation: fadeIn 0.3s ease;
+}
+
+.trade-item:hover { border-color: var(--border2); }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.trade-time { color: var(--muted); font-size: 0.62rem; }
+.trade-symbol { font-weight: 600; }
+.trade-symbol.eth { color: var(--eth); }
+.trade-symbol.sol { color: var(--sol); }
+.trade-symbol.xrp { color: var(--xrp); }
+.trade-profit {
+  font-family: 'Syne', sans-serif;
+  font-weight: 700;
+  color: var(--green);
+  text-align: right;
+}
+
+.trade-filter-bar {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.filter-btn {
+  padding: 4px 12px;
+  border-radius: 5px;
+  font-size: 0.65rem;
+  cursor: pointer;
+  border: 1px solid var(--border2);
+  background: transparent;
+  color: var(--muted);
+  font-family: 'JetBrains Mono', monospace;
+  transition: all 0.15s;
+}
+.filter-btn.active, .filter-btn:hover {
+  background: var(--surface2);
+  color: var(--text);
+}
+.filter-btn.eth.active { color: var(--eth); border-color: var(--eth); }
+.filter-btn.sol.active { color: var(--sol); border-color: var(--sol); }
+.filter-btn.xrp.active { color: var(--xrp); border-color: var(--xrp); }
+
+.trades-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+/* Loading */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 0.75rem;
+  padding: 40px;
+}
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border2);
+  border-top-color: var(--eth);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.page { display: none; }
+.page.active { display: block; }
+
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-title">JANE STREET BOT</div>
+      <div class="logo-sub">MEXC Grid Trading</div>
+      <div class="logo-badge">v17 — LIVE</div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">Overview</div>
+      <div class="nav-item active" onclick="showPage('overview', this)">
+        <div class="nav-dot overview"></div>
+        總覽
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">幣種</div>
+      <div class="nav-item" onclick="showPage('eth', this)">
+        <div class="nav-dot eth"></div>
+        ETH / USDT
+        <span class="nav-profit" id="nav-eth-profit">--</span>
+      </div>
+      <div class="nav-item" onclick="showPage('sol', this)">
+        <div class="nav-dot sol"></div>
+        SOL / USDT
+        <span class="nav-profit" id="nav-sol-profit">--</span>
+      </div>
+      <div class="nav-item" onclick="showPage('xrp', this)">
+        <div class="nav-dot xrp"></div>
+        XRP / USDT
+        <span class="nav-profit" id="nav-xrp-profit">--</span>
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">紀錄</div>
+      <div class="nav-item" onclick="showPage('trades', this)">
+        <div class="nav-dot" style="background:var(--orange)"></div>
+        成交紀錄
+        <span class="nav-profit" id="nav-trades-count" style="color:var(--orange)">--</span>
+      </div>
+    </div>
+
+    <div class="sidebar-footer">
+      <div style="margin-bottom:8px">
+        <div style="font-size:0.6rem;color:var(--muted);margin-bottom:4px">API 伺服器</div>
+        <input class="server-input" id="server-url" value="http://139.180.130.184:5566" style="width:100%">
+      </div>
+      <button class="btn primary" onclick="loadAll()" style="width:100%">↻ 重新整理</button>
+      <div class="status-row" style="margin-top:10px">
+        <div class="pulse"></div>
+        <span id="last-updated">連線中...</span>
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+
+    <!-- Overview page -->
+    <div id="page-overview" class="page active">
+      <div class="topbar">
+        <div class="page-title">總覽</div>
+      </div>
+
+      <div class="grid-4" style="grid-template-columns:repeat(5,1fr)">
+        <div class="card-sm">
+          <div class="stat-label">已實現總獲利</div>
+          <div class="stat-value green" id="total-profit">--</div>
+          <div class="stat-sub">USDT</div>
+        </div>
+        <div class="card-sm">
+          <div class="stat-label">總交易筆數</div>
+          <div class="stat-value" id="total-trades">--</div>
+          <div class="stat-sub">筆</div>
+        </div>
+        <div class="card-sm">
+          <div class="stat-label">今日獲利</div>
+          <div class="stat-value green" id="today-profit">--</div>
+          <div class="stat-sub">USDT</div>
+        </div>
+        <div class="card-sm">
+          <div class="stat-label">今日交易</div>
+          <div class="stat-value" id="today-trades">--</div>
+          <div class="stat-sub">筆</div>
+        </div>
+        <div class="card-sm" style="border-top:2px solid var(--yellow)">
+          <div class="stat-label">報酬率 ROI</div>
+          <div class="stat-value" id="total-roi" style="font-size:1.3rem">--</div>
+          <div class="stat-sub">
+            本金 <input id="capital-input" type="number" value="3300"
+              style="width:60px;background:transparent;border:none;border-bottom:1px solid var(--border2);
+              color:var(--yellow);font-family:JetBrains Mono,monospace;font-size:0.65rem;text-align:center"
+              onchange="updateROI()"> USDT
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-3">
+        <div class="card-sm" id="coin-card-eth" style="border-top:2px solid var(--eth)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <div style="font-family:Syne,sans-serif;font-weight:700;font-size:1rem">ETH</div>
+            <div style="font-size:0.65rem;color:var(--muted)" id="eth-price-overview">--</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div><div class="stat-label">累計獲利</div><div style="color:var(--green);font-weight:600" id="eth-total-p">--</div></div>
+            <div><div class="stat-label">總交易</div><div id="eth-total-t">--</div></div>
+            <div><div class="stat-label">今日獲利</div><div style="color:var(--green)" id="eth-today-p">--</div></div>
+            <div><div class="stat-label">持倉批次</div><div id="eth-batches">--</div></div>
+          </div>
+        </div>
+        <div class="card-sm" id="coin-card-sol" style="border-top:2px solid var(--sol)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <div style="font-family:Syne,sans-serif;font-weight:700;font-size:1rem">SOL</div>
+            <div style="font-size:0.65rem;color:var(--muted)" id="sol-price-overview">--</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div><div class="stat-label">累計獲利</div><div style="color:var(--green);font-weight:600" id="sol-total-p">--</div></div>
+            <div><div class="stat-label">總交易</div><div id="sol-total-t">--</div></div>
+            <div><div class="stat-label">今日獲利</div><div style="color:var(--green)" id="sol-today-p">--</div></div>
+            <div><div class="stat-label">持倉批次</div><div id="sol-batches">--</div></div>
+          </div>
+        </div>
+        <div class="card-sm" id="coin-card-xrp" style="border-top:2px solid var(--xrp)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <div style="font-family:Syne,sans-serif;font-weight:700;font-size:1rem">XRP</div>
+            <div style="font-size:0.65rem;color:var(--muted)" id="xrp-price-overview">--</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+            <div><div class="stat-label">累計獲利</div><div style="color:var(--green);font-weight:600" id="xrp-total-p">--</div></div>
+            <div><div class="stat-label">總交易</div><div id="xrp-total-t">--</div></div>
+            <div><div class="stat-label">今日獲利</div><div style="color:var(--green)" id="xrp-today-p">--</div></div>
+            <div><div class="stat-label">持倉批次</div><div id="xrp-batches">--</div></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid-2-1">
+        <div class="card">
+          <div class="section-hdr"><div class="section-title">每日獲利趨勢</div></div>
+          <canvas id="bar-chart" height="180"></canvas>
+        </div>
+        <div class="card">
+          <div class="section-hdr"><div class="section-title">三幣佔比</div></div>
+          <canvas id="pie-chart" height="180"></canvas>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-hdr"><div class="section-title">每日明細</div></div>
+        <div id="daily-table-container"><div class="loading"><div class="spinner"></div>載入中...</div></div>
+      </div>
+    </div>
+
+    <!-- Trades page -->
+    <div id="page-trades" class="page">
+      <div class="topbar">
+        <div class="page-title">成交紀錄</div>
+        <div style="font-size:0.7rem;color:var(--muted)" id="trades-last-refresh">--</div>
+      </div>
+
+      <div class="trades-summary">
+        <div class="card-sm">
+          <div class="stat-label">總筆數</div>
+          <div class="stat-value" style="font-size:1.2rem" id="ts-total">--</div>
+        </div>
+        <div class="card-sm">
+          <div class="stat-label">總獲利</div>
+          <div class="stat-value green" style="font-size:1.2rem" id="ts-profit">--</div>
+        </div>
+        <div class="card-sm">
+          <div class="stat-label">平均每筆</div>
+          <div class="stat-value" style="font-size:1.2rem" id="ts-avg">--</div>
+        </div>
+        <div class="card-sm">
+          <div class="stat-label">最新一筆</div>
+          <div class="stat-value green" style="font-size:1.2rem" id="ts-latest">--</div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="trade-filter-bar">
+          <span style="font-size:0.62rem;color:var(--muted);margin-right:4px">篩選：</span>
+          <button class="filter-btn active" onclick="filterTrades('all', this)">全部</button>
+          <button class="filter-btn eth" onclick="filterTrades('eth', this)">ETH</button>
+          <button class="filter-btn sol" onclick="filterTrades('sol', this)">SOL</button>
+          <button class="filter-btn xrp" onclick="filterTrades('xrp', this)">XRP</button>
+          <button class="filter-btn" onclick="filterTrades('inner', this)">INNER</button>
+          <button class="filter-btn" onclick="filterTrades('outer', this)">OUTER</button>
+          <span style="margin-left:auto;font-size:0.62rem;color:var(--muted)" id="trades-showing"></span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:140px 60px 48px 90px 90px 1fr;gap:8px;padding:6px 12px;margin-bottom:4px">
+          <div style="font-size:0.58rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px">時間</div>
+          <div style="font-size:0.58rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px">幣種</div>
+          <div style="font-size:0.58rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px">層</div>
+          <div style="font-size:0.58rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px">買入價</div>
+          <div style="font-size:0.58rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px">賣出價</div>
+          <div style="font-size:0.58rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;text-align:right">獲利</div>
+        </div>
+
+        <div class="trade-feed" id="trade-feed">
+          <div class="loading"><div class="spinner"></div>載入中...</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Coin pages (ETH / SOL / XRP) -->
+    <div id="page-eth" class="page"></div>
+    <div id="page-sol" class="page"></div>
+    <div id="page-xrp" class="page"></div>
+
+  </main>
+</div>
+
+<script>
+const COLORS = { eth: '#627eea', sol: '#9945ff', xrp: '#00aae4' };
+const COIN_NAMES = { eth: 'ETH', sol: 'SOL', xrp: 'XRP' };
+let statsData = null;
+let batchesData = {};
+let coinData = {};
+let klineCharts = {};
+let barChart = null, pieChart = null;
+let currentInterval = { eth: '15m', sol: '15m', xrp: '1m' };
+
+function getBase() { return document.getElementById('server-url').value.trim(); }
+function today() { return new Date().toISOString().split('T')[0]; }
+
+// ── Page navigation ──
+function showPage(name, el) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(`page-${name}`).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  if (el) el.classList.add('active');
+
+  if (name === 'trades') { loadTrades(); }
+  if (['eth','sol','xrp'].includes(name)) {
+    renderCoinPage(name);
+    loadCoinData(name);
+  }
+}
+
+// ── Load all overview data ──
+async function loadAll() {
+  try {
+    const base = getBase();
+    const resp = await fetch(`${base}/api/stats`);
+    statsData = await resp.json();
+
+    const bResp = await fetch(`${base}/api/batches`);
+    batchesData = await bResp.json();
+
+    renderOverview();
+    document.getElementById('last-updated').textContent =
+      new Date().toLocaleTimeString('zh-TW');
+  } catch(e) {
+    document.getElementById('last-updated').textContent = '❌ 連線失敗';
+  }
+}
+
+// ── Load coin-specific data (klines + batches) ──
+async function loadCoinData(coin) {
+  try {
+    const base = getBase();
+    const interval = currentInterval[coin] || '15m';
+    const resp = await fetch(`${base}/api/all/${coin}?interval=${interval}`);
+    coinData[coin] = await resp.json();
+    renderCoinPage(coin);
+  } catch(e) {
+    console.error('loadCoinData error', e);
+  }
+}
+
+// ── Overview render ──
+function renderOverview() {
+  if (!statsData) return;
+  const coins = ['eth','sol','xrp'];
+  const todayStr = today();
+
+  let tp = 0, tt = 0, tdp = 0, tdt = 0;
+  coins.forEach(c => {
+    const s = statsData[c];
+    tp += s.total_profit;
+    tt += s.total_trades;
+    const td = s.daily[todayStr];
+    if (td) { tdp += td.profit; tdt += td.trades; }
+    document.getElementById(`nav-${c}-profit`).textContent = '+$' + s.total_profit.toFixed(2);
+    document.getElementById(`${c}-total-p`).textContent = '+$' + s.total_profit.toFixed(4);
+    document.getElementById(`${c}-total-t`).textContent = s.total_trades + ' 筆';
+    document.getElementById(`${c}-today-p`).textContent = td ? '+$' + td.profit.toFixed(4) : '$0';
+    document.getElementById(`${c}-batches`).textContent = (batchesData[c] || []).length + ' 筆';
+  });
+
+  document.getElementById('total-profit').textContent = '+$' + tp.toFixed(2);
+  document.getElementById('total-trades').textContent = tt;
+  document.getElementById('today-profit').textContent = '+$' + tdp.toFixed(4);
+  document.getElementById('today-trades').textContent = tdt;
+
+  renderBarChart();
+  renderPieChart();
+  renderDailyTable();
+  updateROI();
+}
+
+function renderBarChart() {
+  const allDates = new Set();
+  ['eth','sol','xrp'].forEach(c => Object.keys(statsData[c].daily).forEach(d => allDates.add(d)));
+  const dates = [...allDates].sort();
+  const labels = dates.map(d => d.slice(5));
+
+  if (barChart) barChart.destroy();
+  barChart = new Chart(document.getElementById('bar-chart'), {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: ['eth','sol','xrp'].map(c => ({
+        label: c.toUpperCase(),
+        data: dates.map(d => statsData[c].daily[d]?.profit || 0),
+        backgroundColor: COLORS[c] + 'bb',
+        borderRadius: 3,
+      }))
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { labels: { color: '#636e7b', font: { family: 'JetBrains Mono', size: 10 }, padding: 12 } }
+      },
+      scales: {
+        x: { stacked: true, grid: { color: 'rgba(30,39,50,0.5)' }, ticks: { color: '#636e7b', font: { size: 9 } } },
+        y: { stacked: true, grid: { color: 'rgba(30,39,50,0.5)' }, ticks: { color: '#636e7b', font: { size: 9 }, callback: v => '$'+v.toFixed(2) } }
+      }
+    }
+  });
+}
+
+function renderPieChart() {
+  if (pieChart) pieChart.destroy();
+  pieChart = new Chart(document.getElementById('pie-chart'), {
+    type: 'doughnut',
+    data: {
+      labels: ['ETH', 'SOL', 'XRP'],
+      datasets: [{
+        data: ['eth','sol','xrp'].map(c => statsData[c].total_profit),
+        backgroundColor: ['eth','sol','xrp'].map(c => COLORS[c] + 'cc'),
+        borderWidth: 0,
+        hoverOffset: 6,
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: 'bottom', labels: { color: '#636e7b', font: { family: 'JetBrains Mono', size: 10 }, padding: 14 } },
+        tooltip: { callbacks: { label: ctx => ` $${ctx.raw.toFixed(4)} USDT` } }
+      }
+    }
+  });
+}
+
+function renderDailyTable() {
+  const allDates = new Set();
+  ['eth','sol','xrp'].forEach(c => Object.keys(statsData[c].daily).forEach(d => allDates.add(d)));
+  const dates = [...allDates].sort().reverse();
+  const todayStr = today();
+
+  let html = `<table class="daily-table"><thead><tr>
+    <th>日期</th>
+    <th>ETH 筆</th><th>ETH 獲利</th>
+    <th>SOL 筆</th><th>SOL 獲利</th>
+    <th>XRP 筆</th><th>XRP 獲利</th>
+    <th>合計</th>
+  </tr></thead><tbody>`;
+
+  dates.forEach(d => {
+    const e = statsData.eth.daily[d] || {trades:0,profit:0};
+    const s = statsData.sol.daily[d] || {trades:0,profit:0};
+    const x = statsData.xrp.daily[d] || {trades:0,profit:0};
+    const total = e.profit + s.profit + x.profit;
+    const isT = d === todayStr;
+    html += `<tr class="${isT?'today':''}">
+      <td>${d}${isT?'<span class="today-badge">TODAY</span>':''}</td>
+      <td>${e.trades}</td><td class="profit">+$${e.profit.toFixed(4)}</td>
+      <td>${s.trades}</td><td class="profit">+$${s.profit.toFixed(4)}</td>
+      <td>${x.trades}</td><td class="profit">+$${x.profit.toFixed(4)}</td>
+      <td class="profit" style="font-weight:600">+$${total.toFixed(4)}</td>
+    </tr>`;
+  });
+
+  html += '</tbody></table>';
+  document.getElementById('daily-table-container').innerHTML = html;
+}
+
+// ── Coin page render ──
+function renderCoinPage(coin) {
+  const page = document.getElementById(`page-${coin}`);
+  const color = COLORS[coin];
+  const name = COIN_NAMES[coin];
+  const data = coinData[coin];
+  const stats = statsData?.[coin];
+  const todayStr = today();
+  const td = stats?.daily?.[todayStr];
+  const batches = data?.batches || batchesData[coin] || [];
+  const price = data?.price || 0;
+
+  const intervals = coin === 'xrp'
+    ? ['1m','5m','15m','1h']
+    : ['5m','15m','1h','4h'];
+
+  page.innerHTML = `
+    <div class="topbar">
+      <div class="page-title" style="color:${color}">${name} / USDT</div>
+      <div style="font-family:Syne,sans-serif;font-size:1.5rem;font-weight:700" id="${coin}-live-price">
+        ${price ? '$' + price.toFixed(price < 10 ? 4 : 2) : '--'}
+      </div>
+    </div>
+
+    <div class="grid-4" style="margin-bottom:16px">
+      <div class="card-sm">
+        <div class="stat-label">累計獲利</div>
+        <div class="stat-value green" style="font-size:1.2rem">+$${stats?.total_profit?.toFixed(4) || '--'}</div>
+      </div>
+      <div class="card-sm">
+        <div class="stat-label">總交易</div>
+        <div class="stat-value" style="font-size:1.2rem">${stats?.total_trades || '--'} 筆</div>
+      </div>
+      <div class="card-sm">
+        <div class="stat-label">今日獲利</div>
+        <div class="stat-value green" style="font-size:1.2rem">+$${td?.profit?.toFixed(4) || '0.0000'}</div>
+      </div>
+      <div class="card-sm">
+        <div class="stat-label">今日交易</div>
+        <div class="stat-value" style="font-size:1.2rem">${td?.trades || 0} 筆</div>
+      </div>
+    </div>
+
+    <!-- K-line chart -->
+    <div class="chart-container">
+      <div class="chart-header">
+        <div>
+          <div class="chart-title">K 線圖 — ${name}/USDT</div>
+          <div style="font-size:0.65rem;color:var(--muted);margin-top:4px">
+            🟢 綠線 = 賣單掛單位置 &nbsp;|&nbsp; 🔴 紅線 = 買入成本 &nbsp;|&nbsp; 🟡 黃線 = 觸發均價
+          </div>
+        </div>
+        <div class="interval-btns">
+          ${intervals.map(iv => `<button class="interval-btn ${currentInterval[coin]===iv?'active':''}"
+            onclick="changeInterval('${coin}','${iv}',this)">${iv}</button>`).join('')}
+        </div>
+      </div>
+      <div id="${coin}-kline" style="height:500px;width:100%;min-width:400px;display:block"></div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px">
+      <!-- Batch list -->
+      <div class="card">
+        <div class="section-hdr">
+          <div class="section-title">持倉批次 (${batches.length}筆)</div>
+        </div>
+        <div class="batch-list">
+          ${batches.length === 0
+            ? '<div class="loading">沒有持倉</div>'
+            : batches.map(b => {
+                const profitPct = b.sell_price
+                  ? (((parseFloat(b.sell_price) - parseFloat(b.buy_price)) / parseFloat(b.buy_price)) * 100).toFixed(3)
+                  : '0';
+                return `<div class="batch-item">
+                  <div class="batch-id">#${b.id}</div>
+                  <div><span class="badge ${b.layer}">${b.layer}</span></div>
+                  <div><div style="font-size:0.6rem;color:var(--muted)">買入</div>$${parseFloat(b.buy_price).toFixed(4)}</div>
+                  <div><div style="font-size:0.6rem;color:var(--muted)">目標賣</div><span class="batch-sell">$${b.sell_price ? parseFloat(b.sell_price).toFixed(4) : '--'}</span></div>
+                  <div class="batch-status">+${profitPct}%<br>${b.sell_order_id ? '✓掛單' : '待掛'}</div>
+                </div>`;
+              }).join('')
+          }
+        </div>
+      </div>
+
+      <!-- Daily table for this coin -->
+      <div class="card">
+        <div class="section-hdr"><div class="section-title">每日明細</div></div>
+        <table class="daily-table">
+          <thead><tr><th>日期</th><th>筆數</th><th>獲利</th><th>內層</th><th>外層</th></tr></thead>
+          <tbody>
+            ${Object.entries(stats?.daily || {}).sort((a,b) => b[0].localeCompare(a[0])).map(([d, day]) => `
+              <tr class="${d===todayStr?'today':''}">
+                <td>${d.slice(5)}${d===todayStr?'<span class="today-badge">T</span>':''}</td>
+                <td>${day.trades}</td>
+                <td class="profit">+$${day.profit.toFixed(4)}</td>
+                <td style="color:var(--muted);font-size:0.65rem">$${day.inner?.toFixed(3)||'0'}</td>
+                <td style="color:var(--muted);font-size:0.65rem">$${day.outer?.toFixed(3)||'0'}</td>
+              </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  `;
+
+  // Render kline chart after DOM is ready - wait for element to have width
+  const waitForWidth = (attempts) => {
+    const el = document.getElementById(`${coin}-kline`);
+    if (el && el.clientWidth > 0) {
+      if (klineCharts[coin]) {
+        klineCharts[coin].remove();
+        klineCharts[coin] = null;
+      }
+      renderKline(coin);
+    } else if (attempts > 0) {
+      setTimeout(() => waitForWidth(attempts - 1), 200);
+    }
+  };
+  setTimeout(() => waitForWidth(10), 200);
+}
+
+function renderKline(coin) {
+  const data = coinData[coin];
+  if (!data || !data.candles || data.candles.length === 0) return;
+
+  const el = document.getElementById(`${coin}-kline`);
+  if (!el) return;
+
+  // Destroy old chart
+  if (klineCharts[coin]) {
+    klineCharts[coin].remove();
+    klineCharts[coin] = null;
+  }
+
+  const chart = LightweightCharts.createChart(el, {
+    width: el.clientWidth,
+    height: 500,
+    layout: {
+      background: { color: 'transparent' },
+      textColor: '#636e7b',
+      fontFamily: 'JetBrains Mono',
+      fontSize: 10,
+    },
+    grid: {
+      vertLines: { color: 'rgba(30,39,50,0.6)' },
+      horzLines: { color: 'rgba(30,39,50,0.6)' },
+    },
+    crosshair: {
+      mode: LightweightCharts.CrosshairMode.Normal,
+    },
+    rightPriceScale: {
+      borderColor: '#1e2732',
+    },
+    timeScale: {
+      borderColor: '#1e2732',
+      timeVisible: true,
+      secondsVisible: false,
+    },
+  });
+
+  // Candlestick series
+  const candleSeries = chart.addCandlestickSeries({
+    upColor: '#3fb950',
+    downColor: '#f85149',
+    borderUpColor: '#3fb950',
+    borderDownColor: '#f85149',
+    wickUpColor: '#3fb950',
+    wickDownColor: '#f85149',
+  });
+  candleSeries.setData(data.candles);
+
+  // Volume series
+  const volSeries = chart.addHistogramSeries({
+    color: '#636e7b',
+    priceFormat: { type: 'volume' },
+    priceScaleId: 'vol',
+    scaleMargins: { top: 0.85, bottom: 0 },
+  });
+  volSeries.setData(data.candles.map(c => ({
+    time: c.time,
+    value: c.volume,
+    color: c.close >= c.open ? 'rgba(63,185,80,0.3)' : 'rgba(248,81,73,0.3)',
+  })));
+
+  // Current price line
+  if (data.price) {
+    candleSeries.createPriceLine({
+      price: data.price,
+      color: COLORS[coin],
+      lineWidth: 1,
+      lineStyle: LightweightCharts.LineStyle.Dashed,
+      axisLabelVisible: true,
+      title: `現價 $${data.price.toFixed(data.price < 10 ? 4 : 2)}`,
+    });
+  }
+
+  // Sell order lines (green)
+  const batches = data.batches || [];
+  const sellPrices = [...new Set(batches.filter(b => b.sell_price).map(b => parseFloat(b.sell_price)))];
+  sellPrices.forEach(sp => {
+    candleSeries.createPriceLine({
+      price: sp,
+      color: '#3fb950',
+      lineWidth: 1,
+      lineStyle: LightweightCharts.LineStyle.Dotted,
+      axisLabelVisible: false,
+      title: '',
+    });
+  });
+
+  // Buy price lines (red) - show avg and individual
+  const buyPrices = batches.map(b => parseFloat(b.buy_price));
+  if (buyPrices.length > 0) {
+    const avgBuy = buyPrices.reduce((a,b) => a+b, 0) / buyPrices.length;
+    candleSeries.createPriceLine({
+      price: avgBuy,
+      color: '#f85149',
+      lineWidth: 2,
+      lineStyle: LightweightCharts.LineStyle.Dashed,
+      axisLabelVisible: true,
+      title: `均成本 $${avgBuy.toFixed(avgBuy < 10 ? 4 : 2)}`,
+    });
+  }
+
+  chart.timeScale().fitContent();
+
+  // Resize observer
+  const ro = new ResizeObserver(() => {
+    chart.applyOptions({ width: el.clientWidth });
+  });
+  ro.observe(el);
+
+  klineCharts[coin] = chart;
+}
+
+function changeInterval(coin, interval, btn) {
+  currentInterval[coin] = interval;
+  btn.closest('.interval-btns').querySelectorAll('.interval-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  loadCoinData(coin);
+}
+
+// ── ROI ──
+function updateROI() {
+  if (!statsData) return;
+  const capital = parseFloat(document.getElementById('capital-input').value) || 3300;
+  const profit = statsData.summary.total_profit;
+  const roi = (profit / capital * 100).toFixed(2);
+  const el = document.getElementById('total-roi');
+  el.textContent = (profit >= 0 ? '+' : '') + roi + '%';
+  el.className = 'stat-value ' + (profit >= 0 ? 'green' : 'red');
+  el.style.fontSize = '1.3rem';
+}
+
+// ── Trades ──
+let allTrades = [];
+let tradesFilter = 'all';
+
+async function loadTrades() {
+  try {
+    const base = getBase();
+    const resp = await fetch(`${base}/api/trades?limit=500`);
+    allTrades = await resp.json();
+    renderTrades();
+    document.getElementById('trades-last-refresh').textContent =
+      '更新於 ' + new Date().toLocaleTimeString('zh-TW');
+    document.getElementById('nav-trades-count').textContent = allTrades.length + ' 筆';
+  } catch(e) {
+    document.getElementById('trade-feed').innerHTML =
+      '<div class="loading">❌ 無法載入成交紀錄</div>';
+  }
+}
+
+function filterTrades(type, btn) {
+  tradesFilter = type;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTrades();
+}
+
+function renderTrades() {
+  let filtered = allTrades;
+  if (tradesFilter !== 'all') {
+    if (['eth','sol','xrp'].includes(tradesFilter)) {
+      filtered = allTrades.filter(t => t.symbol.toLowerCase().includes(tradesFilter));
+    } else {
+      filtered = allTrades.filter(t => t.layer.toLowerCase() === tradesFilter);
+    }
+  }
+
+  // Summary
+  const total = filtered.length;
+  const totalProfit = filtered.reduce((s, t) => s + t.profit, 0);
+  const avg = total > 0 ? totalProfit / total : 0;
+  const latest = filtered[0]?.profit || 0;
+
+  document.getElementById('ts-total').textContent = total + ' 筆';
+  document.getElementById('ts-profit').textContent = '+$' + totalProfit.toFixed(4);
+  document.getElementById('ts-avg').textContent = '+$' + avg.toFixed(4);
+  document.getElementById('ts-latest').textContent = latest ? '+$' + latest.toFixed(4) : '--';
+  document.getElementById('trades-showing').textContent = `顯示 ${Math.min(filtered.length, 300)} / ${total} 筆`;
+
+  const colorMap = { eth: 'var(--eth)', sol: 'var(--sol)', xrp: 'var(--xrp)' };
+
+  const html = filtered.slice(0, 300).map(t => {
+    const coin = t.symbol.replace('USDT','').toLowerCase();
+    const color = colorMap[coin] || 'var(--text)';
+    const decimals = t.buy_price < 10 ? 4 : 2;
+    return `<div class="trade-item">
+      <div class="trade-time">${t.time}</div>
+      <div class="trade-symbol" style="color:${color}">${coin.toUpperCase()}</div>
+      <div><span class="badge ${t.layer.toLowerCase()}">${t.layer}</span></div>
+      <div style="color:var(--muted)">$${t.buy_price.toFixed(decimals)}</div>
+      <div>$${t.sell_price.toFixed(decimals)}</div>
+      <div class="trade-profit">+$${t.profit.toFixed(4)}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('trade-feed').innerHTML =
+    html || '<div class="loading">沒有符合條件的紀錄</div>';
+}
+
+// ── Init ──
+loadAll();
+setInterval(loadAll, 30000);
+
+// Auto-refresh coin data if on coin page
+setInterval(() => {
+  if (document.getElementById('page-trades').classList.contains('active')) {
+    loadTrades();
+  }
+}, 10000);
+
+setInterval(() => {
+  ['eth','sol','xrp'].forEach(coin => {
+    if (document.getElementById(`page-${coin}`).classList.contains('active')) {
+      loadCoinData(coin);
+    }
+  });
+}, 15000);
+</script>
+</body>
+</html>
