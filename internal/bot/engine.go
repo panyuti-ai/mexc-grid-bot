@@ -253,7 +253,7 @@ func (g *BuyRateGuard) Record() {
 //  OrderFlowCache（OBI / TFI）
 // ════════════════════════════════
 
-const obiRefreshSec = 10
+const obiRefreshSec = 4
 
 type OrderFlowCache struct {
 	symbol      string
@@ -269,47 +269,22 @@ func NewOrderFlowCache(symbol string, client *mexc.Client) *OrderFlowCache {
 }
 
 func (c *OrderFlowCache) Update(logger *log.Logger) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	now := time.Now().Unix()
-	if now-c.lastUpdated < obiRefreshSec {
-		return
-	}
-
-	ob, err := c.client.GetOrderBook(c.symbol, 20)
-	if err == nil {
-		bidV, askV := 0.0, 0.0
-		for _, b := range ob.Bids {
-			v, _ := strconv.ParseFloat(b[1], 64)
-			bidV += v
-		}
-		for _, a := range ob.Asks {
-			v, _ := strconv.ParseFloat(a[1], 64)
-			askV += v
-		}
-		if total := bidV + askV; total > 0 {
-			c.OBI = bidV / total
-		}
-	} else {
-		logger.Printf("OBI 更新失敗：%v", err)
-	}
-
-	trades, err := c.client.GetAggTrades(c.symbol, 50)
-	if err == nil {
-		buyV, sellV := 0.0, 0.0
-		for _, t := range trades {
-			v, _ := strconv.ParseFloat(t.Qty, 64)
-			if !t.IsBuyerMaker {
-				buyV += v
-			} else {
-				sellV += v
-			}
-		}
-		if total := buyV + sellV; total > 0 {
-			c.TFI = buyV / total
-		}
-	} else {
-		logger.Printf("TFI 更新失敗：%v", err)
-	}
-	c.lastUpdated = now
+	now:=time.Now().Unix();c.mu.Lock()
+	if now-c.lastUpdated<obiRefreshSec{c.mu.Unlock();return}
+	c.lastUpdated=now;c.mu.Unlock()
+	var wg sync.WaitGroup;wg.Add(2)
+	go func(){defer wg.Done()
+		ob,err:=c.client.GetOrderBook(c.symbol,20)
+		if err!=nil{logger.Printf("OBI:%v",err);return}
+		var bV,aV float64
+		for _,b:=range ob.Bids{v,_:=strconv.ParseFloat(b[1],64);bV+=v}
+		for _,a:=range ob.Asks{v,_:=strconv.ParseFloat(a[1],64);aV+=v}
+		if t:=bV+aV;t>0{c.mu.Lock();c.OBI=bV/t;c.mu.Unlock()}}()
+	go func(){defer wg.Done()
+		tr,err:=c.client.GetAggTrades(c.symbol,50)
+		if err!=nil{logger.Printf("TFI:%v",err);return}
+		var buy,sell float64
+		for _,t:=range tr{v,_:=strconv.ParseFloat(t.Qty,64);if !t.IsBuyerMaker{buy+=v}else{sell+=v}}
+		if t:=buy+sell;t>0{c.mu.Lock();c.TFI=buy/t;c.mu.Unlock()}}()
+	wg.Wait()
 }

@@ -10,7 +10,7 @@ const (
 	takerFee               = 0.0005 // 0.05%
 	makerFee               = 0.0    // 0%
 	inventorySkewThreshold = 0.50
-	maxInventory           = 0.99
+	maxInventory           = 1.0
 	minInventory           = 0.15
 	minBuyAmount           = 6.0
 )

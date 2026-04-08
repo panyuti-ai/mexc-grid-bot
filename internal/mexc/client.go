@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -61,12 +60,12 @@ func (c *Client) get(path string, params url.Values, auth bool) ([]byte, error) 
 func (c *Client) post(path string, params url.Values) ([]byte, error) {
 	params.Set("timestamp", c.ts())
 	params.Set("signature", c.sign(params.Encode()))
-	req, err := http.NewRequest("POST", baseURL+path, strings.NewReader(params.Encode()))
+	req, err := http.NewRequest("POST", baseURL+path+"?"+params.Encode(), nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("X-MEXC-APIKEY", c.APIKey)
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("User-Agent", "Mozilla/5.0")
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, err
@@ -83,6 +82,7 @@ func (c *Client) del(path string, params url.Values) ([]byte, error) {
 		return nil, err
 	}
 	req.Header.Set("X-MEXC-APIKEY", c.APIKey)
+	req.Header.Set("User-Agent", "Mozilla/5.0")
 	resp, err := c.http.Do(req)
 	if err != nil {
 		return nil, err
@@ -90,8 +90,6 @@ func (c *Client) del(path string, params url.Values) ([]byte, error) {
 	defer resp.Body.Close()
 	return io.ReadAll(resp.Body)
 }
-
-// ── 市場資料 ──
 
 func (c *Client) GetPrice(symbol string) (float64, error) {
 	b, err := c.get("/api/v3/ticker/price", url.Values{"symbol": {symbol}}, false)
@@ -124,7 +122,6 @@ func (c *Client) GetOrderBook(symbol string, limit int) (*OrderBook, error) {
 	return &ob, json.Unmarshal(b, &ob)
 }
 
-// Kline: [openTime, open, high, low, close, volume, ...]
 type Kline []interface{}
 
 func (c *Client) GetKlines(symbol, interval string, limit int) ([]Kline, error) {
@@ -143,6 +140,7 @@ func (c *Client) GetKlines(symbol, interval string, limit int) ([]Kline, error) 
 type AggTrade struct {
 	Qty          string `json:"q"`
 	IsBuyerMaker bool   `json:"m"`
+	BestMatch    bool   `json:"M"` // prevent case-insensitive collision with "m"
 }
 
 func (c *Client) GetAggTrades(symbol string, limit int) ([]AggTrade, error) {
@@ -156,8 +154,6 @@ func (c *Client) GetAggTrades(symbol string, limit int) ([]AggTrade, error) {
 	var trades []AggTrade
 	return trades, json.Unmarshal(b, &trades)
 }
-
-// ── 帳戶 ──
 
 type Balance struct {
 	Asset  string `json:"asset"`
@@ -177,8 +173,6 @@ func (c *Client) GetAccountInfo() (*AccountInfo, error) {
 	var info AccountInfo
 	return &info, json.Unmarshal(b, &info)
 }
-
-// ── 交易 ──
 
 type OrderResult struct {
 	OrderID string `json:"orderId"`
@@ -242,7 +236,6 @@ func (c *Client) CancelOrder(symbol, orderID string) error {
 	return err
 }
 
-// formatPrice 根據 tickSize 決定小數位數
 func formatPrice(price, tickSize float64) string {
 	if tickSize >= 1 {
 		return fmt.Sprintf("%.0f", price)
@@ -256,4 +249,21 @@ func formatPrice(price, tickSize float64) string {
 		return fmt.Sprintf("%.4f", price)
 	}
 	return strconv.FormatFloat(price, 'f', -1, 64)
+}
+
+func (c *Client) LimitBuy(symbol string, qty, price, tickSize float64) (*OrderResult, error) {
+	priceStr := formatPrice(price, tickSize)
+	b, err := c.post("/api/v3/order", url.Values{
+		"symbol":      {symbol},
+		"side":        {"BUY"},
+		"type":        {"LIMIT_MAKER"},
+		"quantity":    {fmt.Sprintf("%.6f", qty)},
+		"price":       {priceStr},
+		"timeInForce": {"GTC"},
+	})
+	if err != nil { return nil, err }
+	var r OrderResult
+	if err2:=json.Unmarshal(b,&r);err2!=nil{return nil,err2}
+	if r.Code!=0{return nil,fmt.Errorf("MEXC %d: %s",r.Code,r.Msg)}
+	return &r,nil
 }

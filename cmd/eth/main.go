@@ -20,7 +20,7 @@ func main() {
 		InnerMaxSellLoop: 5,
 		InnerResetMult:   2.5,
 
-		OuterBase:        20.0 / 10000,
+		OuterBase:        10.0 / 10000,
 		OuterTrendMult:   1.3,
 		OuterMaxBatch:    40,
 		OuterMaxSellLoop: 2,

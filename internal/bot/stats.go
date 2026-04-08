@@ -67,40 +67,6 @@ func getTodayStats(file string) (profit float64, trades int, inner, outer, total
 
 // ── trades_log.json（跟 Python 同路徑）──
 
-const tradesLogFile = "trades_log.json"
-const tradesLogMax = 500
-
-type TradeLog struct {
-	Time      string  `json:"time"`
-	Symbol    string  `json:"symbol"`
-	Layer     string  `json:"layer"`
-	Batch     int     `json:"batch"`
-	BuyPrice  float64 `json:"buy_price"`
-	SellPrice float64 `json:"sell_price"`
-	Profit    float64 `json:"profit"`
-}
-
-func logTrade(symbol, layer string, batchID int, buyPrice, sellPrice, profit float64) {
-	entry := TradeLog{
-		Time:      time.Now().Format("2006-01-02 15:04:05"),
-		Symbol:    symbol,
-		Layer:     layer,
-		Batch:     batchID,
-		BuyPrice:  r6(buyPrice),
-		SellPrice: r6(sellPrice),
-		Profit:    r6(profit),
-	}
-	var trades []TradeLog
-	if b, err := os.ReadFile(tradesLogFile); err == nil {
-		_ = json.Unmarshal(b, &trades)
-	}
-	trades = append(trades, entry)
-	if len(trades) > tradesLogMax {
-		trades = trades[len(trades)-tradesLogMax:]
-	}
-	out, _ := json.Marshal(trades)
-	_ = os.WriteFile(tradesLogFile, out, 0644)
-}
 
 // ── Metrics ──
 
